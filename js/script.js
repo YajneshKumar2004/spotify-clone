@@ -2,8 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize the audio player and variables
   let currentSong = new Audio();
   let songs = [];
-  let currFolder;
-  let currentlyPlayingIndex = null; // Tracks the index of the currently playing song
+  let currentlyPlayingIndex = null;
 
   // Converts seconds to a MM:SS format
   function secondsToMinutesSeconds(seconds) {
@@ -17,34 +16,25 @@ document.addEventListener("DOMContentLoaded", () => {
     ).padStart(2, "0")}`;
   }
 
-  // Fetches and returns JSON data from the given path
-  async function fetchJSON(path) {
-    let response = await fetch(path);
-    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-    return await response.json();
-  }
-
-  // Get songs from the selected album folder
-  async function getSongs(folder) {
-    if (!currentSong.paused) {
-      currentSong.pause(); // Pause the current song if playing
-    }
-    currentSong.currentTime = 0; // Reset song playback time
-    currentlyPlayingIndex = null;
-    document.querySelector("#play").src = "img/play.svg"; // Reset play button icon
-
-    currFolder = folder; // Set current folder to the selected album
+  // Fetch songs from the "Liked Songs" folder
+  async function loadSongs() {
     try {
-      let metadata = await fetchJSON(`/${folder}/info.json`); // Fetch album metadata
-      songs = metadata.songs; // Get song list from metadata
-      displaySongs(); // Display song list in the UI
+      const response = await fetch('/api/songs');
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      const data = await response.json();
+      songs = data.songs;
+      displaySongs();
     } catch (error) {
-      console.error("Error fetching songs:", error);
+      console.error("Error loading songs:", error);
+      songs = [];
+      displaySongs();
     }
   }
 
   // Plays the song at the specified index, or pauses it if it's already playing
   function playMusic(index) {
+    if (index < 0 || index >= songs.length) return;
+
     if (currentlyPlayingIndex === index) {
       if (currentSong.paused) {
         currentSong.play();
@@ -63,27 +53,36 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     currentlyPlayingIndex = index;
-    currentSong.src = `/${currFolder}/` + songs[index];
+    const songName = songs[index];
+    currentSong.src = `/Liked Songs/${encodeURIComponent(songName)}`;
     currentSong.play();
     document.querySelector("#play").src = "img/pause.svg";
     document.querySelector(".songinfo").innerHTML = decodeURIComponent(
-      songs[index]
+      songName.replace(/\.[^/.]+$/, "") // Remove file extension
     );
     document.querySelector(".songtime").innerHTML = "00:00 / 00:00";
 
-    displaySongs(); // Update the song list icons
+    displaySongs();
   }
 
-  // Displays the list of songs in the current album
+  // Displays the list of songs
   function displaySongs() {
     let songUL = document.querySelector(".songList ul");
+    
+    if (songs.length === 0) {
+      songUL.innerHTML = '<li style="padding: 20px; text-align: center; color: grey;">No songs found. Add songs to the "Liked Songs" folder and refresh the page.</li>';
+      return;
+    }
+
     songUL.innerHTML = songs
       .map(
-        (song, index) => `
+        (song, index) => {
+          const songName = song.replace(/\.[^/.]+$/, ""); // Remove file extension
+          return `
       <li>
         <img class="invert" width="34" src="img/music.svg" alt="music">
         <div class="info">
-          <div>${decodeURIComponent(song.replaceAll("%20", " "))}</div>
+          <div>${decodeURIComponent(songName.replaceAll("%20", " "))}</div>
         </div>
         <div class="playnow">
           <span>Play Now</span>
@@ -91,7 +90,8 @@ document.addEventListener("DOMContentLoaded", () => {
             currentlyPlayingIndex === index ? "img/pause.svg" : "img/play.svg"
           }" alt="play">
         </div>
-      </li>`
+      </li>`;
+        }
       )
       .join("");
 
@@ -100,70 +100,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Display the available albums
-  async function displayAlbums() {
-    let folders = [
-      "Bollywood Acoustic",
-      "Chill Hits",
-      "Chillout Lounge",
-      "Deep Focus",
-      "Divine Vibes",
-      "exams 2024",
-      "Jazz in the Background",
-      "lofi beats",
-      "lofi sleep",
-      "Peaceful Piano",
-      "Songs to Sing in the Car",
-      "Stress Relief",
-    ];
-    let cardContainer = document.querySelector(".cardContainer");
-
-    for (let folder of folders) {
-      let metadata;
-      try {
-        metadata = await fetchJSON(`/songs/${folder}/info.json`);
-      } catch (e) {
-        console.error(`Error fetching info.json for folder: ${folder}`);
-        metadata = {
-          title: folder,
-          description: "No description available.",
-        };
-      }
-      cardContainer.innerHTML += `
-        <div data-folder="${folder}" class="card">
-          <div class="play">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 20V4L19 12L5 20Z" stroke="#141B34" fill="#000" stroke-width="1.5" stroke-linejoin="round" />
-            </svg>
-          </div>
-          <img src="/songs/${folder}/cover.jpg" alt="cover">
-          <h2>${metadata.title}</h2>
-          <p>${metadata.description}</p>
-        </div>`;
-    }
-
-    // Add event listeners to the album cards
-    Array.from(cardContainer.getElementsByClassName("card")).forEach((card) => {
-      card.addEventListener("click", async () => {
-        let folder = card.dataset.folder;
-        await getSongs(`songs/${folder}`);
-        playMusic(0); // Play the first song of the album
-      });
-    });
-  }
-
   // Sets up various event listeners for player controls
   function setupEventListeners() {
     document.querySelector("#play").addEventListener("click", () => {
+      if (songs.length === 0) return;
+      
       if (currentSong.paused) {
-        currentSong.play();
-        document.querySelector("#play").src = "img/pause.svg";
-        if (currentlyPlayingIndex !== null) {
-          document.querySelector(
-            `.songList ul li:nth-child(${
-              currentlyPlayingIndex + 1
-            }) .playnow img`
-          ).src = "img/pause.svg";
+        if (currentlyPlayingIndex === null) {
+          playMusic(0);
+        } else {
+          currentSong.play();
+          document.querySelector("#play").src = "img/pause.svg";
+          if (currentlyPlayingIndex !== null) {
+            document.querySelector(
+              `.songList ul li:nth-child(${
+                currentlyPlayingIndex + 1
+              }) .playnow img`
+            ).src = "img/pause.svg";
+          }
         }
       } else {
         currentSong.pause();
@@ -188,6 +142,21 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelector(".circle").style.left = `${
         (currentSong.currentTime / currentSong.duration) * 100
       }%`;
+    });
+
+    // Auto-play next song when current song ends
+    currentSong.addEventListener("ended", () => {
+      if (currentlyPlayingIndex !== null && currentlyPlayingIndex < songs.length - 1) {
+        playMusic(currentlyPlayingIndex + 1);
+      } else {
+        // If it's the last song, reset the player
+        currentlyPlayingIndex = null;
+        document.querySelector("#play").src = "img/play.svg";
+        document.querySelector(".songinfo").innerHTML = "";
+        document.querySelector(".songtime").innerHTML = "00:00 / 00:00";
+        document.querySelector(".circle").style.left = "0%";
+        displaySongs(); // Update the UI to show all songs as not playing
+      }
     });
 
     // Seek within the song
@@ -240,12 +209,17 @@ document.addEventListener("DOMContentLoaded", () => {
         document.querySelector(".range input").value = 10;
       }
     });
+
+    // Auto-refresh song list every 5 seconds to detect new songs
+    setInterval(() => {
+      loadSongs();
+    }, 5000);
   }
 
   // Main function to initialize the player
   async function main() {
-    await displayAlbums(); // Display available albums
-    setupEventListeners(); // Setup player controls
+    await loadSongs();
+    setupEventListeners();
   }
 
   main();

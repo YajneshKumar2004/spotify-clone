@@ -1,0 +1,23 @@
+{
+  "name": "spotify-clone",
+  "version": "1.0.0",
+  "description": "Personal music player",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YajneshKumar2004/spotify-clone.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YajneshKumar2004/spotify-clone/issues"
+  },
+  "homepage": "https://github.com/YajneshKumar2004/spotify-clone#readme",
+  "dependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
